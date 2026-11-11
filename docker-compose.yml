@@ -10,6 +10,28 @@ services:
         condition: service_healthy
     volumes:
       - ./app:/app/app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Java/Spring Boot port of the same API, sharing the same database.
+  # Waits for the Python API to be healthy (which means it has created the
+  # schema), so Flyway baselines onto that schema instead of racing it.
+  api-java:
+    build: ./java
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/payments
+      DATABASE_USER: payments
+      DATABASE_PASSWORD: payments
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
 
   db:
     image: postgres:16-alpine

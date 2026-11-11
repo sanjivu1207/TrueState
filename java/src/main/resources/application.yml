@@ -1,0 +1,41 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: truestate-payments
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/payments}
+    username: ${DATABASE_USER:payments}
+    password: ${DATABASE_PASSWORD:payments}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    # Lets this service adopt a database the Python service already created
+    # (see V1__baseline_schema.sql). On an empty database it has no effect.
+    baseline-on-migrate: true
+    baseline-version: 1
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    deserialization:
+      # Mirror Pydantic: 10.5 is not a valid integer number of cents.
+      accept-float-as-int: false
+  mvc:
+    # Unknown routes go through our exception handler ({"detail": "Not Found"}).
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+
+# Same URLs FastAPI uses, so the two services are interchangeable.
+springdoc:
+  api-docs:
+    path: /openapi.json
+  swagger-ui:
+    path: /docs
+
+payments:
+  idempotency:
+    stale-processing-after: 30s
+    wait-for-completion-timeout: 5s
+    poll-interval: 50ms
