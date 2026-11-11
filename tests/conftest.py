@@ -19,14 +19,14 @@ os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg2://payments:payments@localhost:5432/payments"
 )
 
-import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import text  # noqa: E402
-from sqlalchemy.exc import OperationalError  # noqa: E402
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
-import app.main as main_module  # noqa: E402
-from app.config import settings  # noqa: E402
-from app.database import Base, engine  # noqa: E402
+import app.main as main_module
+from app.config import settings
+from app.database import Base, engine
 
 
 @pytest.fixture(scope="session", autouse=True)

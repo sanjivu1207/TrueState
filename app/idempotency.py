@@ -17,7 +17,7 @@ import hashlib
 import json
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
@@ -41,7 +41,7 @@ def _as_aware_utc(dt: datetime) -> datetime:
     always hands back an aware datetime; SQLite, used only for local/test
     runs, hands back a naive one — normalize so age comparisons work on
     either backend."""
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 def hash_request(payload: dict[str, Any]) -> str:
@@ -107,7 +107,7 @@ def _resolve_conflict(db: Session, key: str, request_hash: str) -> ReserveResult
         # Still processing — likely a genuine concurrent duplicate. Unless
         # it's stale, wait for it to finish and replay its result rather
         # than doing the work twice.
-        if datetime.now(timezone.utc) - _as_aware_utc(record.created_at) > STALE_PROCESSING_AFTER:
+        if datetime.now(UTC) - _as_aware_utc(record.created_at) > STALE_PROCESSING_AFTER:
             reclaimed = _try_reclaim(db, key, request_hash)
             if reclaimed:
                 return None
@@ -126,7 +126,7 @@ def _try_reclaim(db: Session, key: str, request_hash: str) -> bool:
     if record is None or record.status != IdempotencyStatus.PROCESSING:
         return False
 
-    record.created_at = datetime.now(timezone.utc)
+    record.created_at = datetime.now(UTC)
     record.request_hash = request_hash
     try:
         db.commit()

@@ -26,6 +26,7 @@ from app.schemas import (
 )
 from app.state_machine import InvalidTransitionError
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Phase 1: create tables directly. Swap for Alembic migrations once the

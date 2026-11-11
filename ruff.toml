@@ -1,0 +1,17 @@
+target-version = "py312"
+line-length = 100
+extend-exclude = ["java"]
+
+[lint]
+# Defaults (pyflakes + core pycodestyle) plus import sorting, pyupgrade,
+# and bugbear (likely-bug patterns).
+extend-select = ["I", "UP", "B"]
+ignore = [
+    # (str, Enum) -> StrEnum changes str() output; these enums are persisted,
+    # so that is a behaviour change, not a lint fix.
+    "UP042",
+]
+
+[lint.flake8-bugbear]
+# FastAPI's dependency-injection markers are meant to be argument defaults.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Header"]
