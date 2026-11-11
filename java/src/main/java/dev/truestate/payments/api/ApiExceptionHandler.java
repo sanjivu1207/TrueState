@@ -5,7 +5,10 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import dev.truestate.payments.api.Dtos.ErrorResponse;
 import dev.truestate.payments.payments.ApiError;
 import jakarta.validation.ConstraintViolation;
+import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,11 +49,24 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ErrorResponse> invalidBody(MethodArgumentNotValidException e) {
-        List<Map<String, Object>> errors = new ArrayList<>();
-        for (FieldError fe : e.getBindingResult().getFieldErrors()) {
-            errors.add(fieldError(fe));
-        }
+        // Bean Validation reports violations in hash order; Pydantic reports
+        // them in field-declaration order. Sort so the output is deterministic
+        // and matches.
+        List<String> declared = declaredFieldOrder(e.getBindingResult().getTarget());
+        List<Map<String, Object>> errors = e.getBindingResult().getFieldErrors().stream()
+                .sorted(Comparator.comparingInt((FieldError fe) -> declared.indexOf(fe.getField())))
+                .map(ApiExceptionHandler::fieldError)
+                .toList();
         return unprocessable(errors);
+    }
+
+    private static List<String> declaredFieldOrder(Object target) {
+        if (target == null || !target.getClass().isRecord()) {
+            return List.of();
+        }
+        return Arrays.stream(target.getClass().getRecordComponents())
+                .map(RecordComponent::getName)
+                .toList();
     }
 
     @ExceptionHandler(MissingRequestHeaderException.class)
