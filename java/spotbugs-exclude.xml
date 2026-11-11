@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!--
+      EI_EXPOSE_REP2 ("may expose internal representation by storing an
+      externally mutable object") fires on every constructor that receives a
+      Spring bean (JdbcTemplate, ObjectMapper, repositories). Sharing those
+      singletons is the point of constructor injection, not a leak of private
+      state. Suppressed for constructors only; the check still applies to
+      every other method.
+    -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+        <Method name="&lt;init&gt;"/>
+    </Match>
+</FindBugsFilter>
