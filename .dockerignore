@@ -1,0 +1,13 @@
+# The Python image only needs requirements.txt and app/; keep the build
+# context small (and free of local virtualenvs / secrets).
+.git
+.github
+.venv
+venv
+.env
+java
+tests
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
