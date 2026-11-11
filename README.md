@@ -1,5 +1,6 @@
 # Idempotent Payment Processing API
 
+[![CI](https://github.com/sanjivu1207/TrueState/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sanjivu1207/TrueState/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
