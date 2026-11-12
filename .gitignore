@@ -9,3 +9,10 @@ venv/
 
 # Java
 java/target/
+
+# Terraform (state lives in S3, never in the repo)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
