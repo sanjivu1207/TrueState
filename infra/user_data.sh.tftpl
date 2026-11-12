@@ -1,0 +1,74 @@
+#!/bin/bash
+# First-boot setup for the app instance. Rendered by Terraform's templatefile:
+# single-$ brace expressions are filled in by Terraform, and the double-$ form
+# is a literal shell expansion.
+set -euxo pipefail
+
+# t3.micro has 1 GB of RAM; a little swap keeps the JVM from being OOM-killed
+# during startup spikes.
+if [ ! -f /swapfile ]; then
+  dd if=/dev/zero of=/swapfile bs=1M count=1024
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
+fi
+
+dnf install -y docker
+systemctl enable --now docker
+
+install -d -m 755 /opt/truestate
+
+# CA bundle so the JDBC driver can verify RDS's TLS certificate (verify-full).
+curl -fsSL -o /opt/truestate/rds-ca.pem \
+  https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+chmod 644 /opt/truestate/rds-ca.pem
+
+cat > /opt/truestate/deploy.sh <<'DEPLOY'
+#!/bin/bash
+# Usage: deploy.sh <image tag>   (CI passes sha-<commit>; first boot uses latest)
+set -euo pipefail
+TAG="$${1:-latest}"
+IMAGE="${image_repository}:$TAG"
+
+docker pull "$IMAGE"
+
+# Password comes from SSM Parameter Store via the instance role; it is written
+# to a root-only env file just long enough for `docker run` to read it.
+ENV_FILE=$(mktemp)
+chmod 600 "$ENV_FILE"
+trap 'rm -f "$ENV_FILE"' EXIT
+{
+  echo "DATABASE_URL=jdbc:postgresql://${db_host}:5432/${db_name}?sslmode=verify-full&sslrootcert=/certs/rds-ca.pem"
+  echo "DATABASE_USER=${db_user}"
+  echo "DATABASE_PASSWORD=$(aws ssm get-parameter --region ${region} \
+      --name ${db_password_param} --with-decryption \
+      --query Parameter.Value --output text)"
+} > "$ENV_FILE"
+
+docker rm -f truestate-java >/dev/null 2>&1 || true
+docker run -d --name truestate-java --restart unless-stopped \
+  --memory 700m \
+  -p 80:8080 \
+  --env-file "$ENV_FILE" \
+  -v /opt/truestate/rds-ca.pem:/certs/rds-ca.pem:ro \
+  --log-opt max-size=10m --log-opt max-file=3 \
+  "$IMAGE"
+
+# Healthy means the app is up *and* can query the database.
+for _ in $(seq 1 90); do
+  if curl -fsS http://localhost/health; then
+    echo
+    echo "deployed $IMAGE"
+    docker image prune -af >/dev/null
+    exit 0
+  fi
+  sleep 2
+done
+echo "health check failed for $IMAGE" >&2
+docker logs --tail 200 truestate-java >&2
+exit 1
+DEPLOY
+chmod 750 /opt/truestate/deploy.sh
+
+/opt/truestate/deploy.sh latest
