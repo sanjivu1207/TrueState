@@ -114,3 +114,53 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  deploy:
+    name: Deploy Java service to AWS
+    # Only after tests pass AND the images were pushed, only for main, and only
+    # once the infrastructure exists (infra/README.md sets these variables).
+    needs: images
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC token -> short-lived AWS credentials; no stored keys
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false # never kill a deploy halfway through
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      INSTANCE_ID: ${{ vars.AWS_INSTANCE_ID }}
+      API_URL: ${{ vars.API_URL }}
+      TAG: sha-${{ github.sha }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Run deploy script on the instance (SSM Run Command)
+        run: |
+          cmd_id=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy $TAG" \
+            --parameters "commands=[\"/opt/truestate/deploy.sh $TAG\"]" \
+            --query Command.CommandId --output text)
+          echo "SSM command $cmd_id"
+          # Pulling the image and booting the JVM takes a couple of minutes.
+          for _ in $(seq 1 60); do
+            sleep 10
+            status=$(aws ssm get-command-invocation --command-id "$cmd_id" \
+              --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || echo Pending)
+            case "$status" in Pending|InProgress|Delayed) continue ;; esac
+            break
+          done
+          aws ssm get-command-invocation --command-id "$cmd_id" --instance-id "$INSTANCE_ID" \
+            --query '[StandardOutputContent,StandardErrorContent]' --output text
+          echo "status: $status"
+          test "$status" = Success
+      - name: Smoke test through CloudFront
+        run: |
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors "$API_URL/health"
+          echo
+          curl -fsSL -o /dev/null -w 'swagger %{http_code}\n' "$API_URL/docs"
